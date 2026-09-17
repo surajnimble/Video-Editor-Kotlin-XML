@@ -1,0 +1,99 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="800"
+    android:viewportHeight="500">
+  <group android:scaleX="1.08"
+      android:scaleY="0.675"
+      android:translateX="-32"
+      android:translateY="81.25">
+    <path
+        android:pathData="M0,0h800v500h-800z">
+      <aapt:attr name="android:fillColor">
+        <gradient
+            android:centerX="400"
+            android:centerY="250"
+            android:gradientRadius="560"
+            android:type="radial">
+          <item android:offset="0" android:color="#FF1A2A3A"/>
+          <item android:offset="1" android:color="#FF0A0F14"/>
+        </gradient>
+      </aapt:attr>
+    </path>
+    <path
+        android:pathData="M227,195L293,195A7,7 0,0 1,300 202L300,202A7,7 0,0 1,293 209L227,209A7,7 0,0 1,220 202L220,202A7,7 0,0 1,227 195z"
+        android:strokeAlpha="0.9"
+        android:fillColor="#a855f7"
+        android:fillAlpha="0.9"/>
+    <path
+        android:pathData="M208,225L292,225A8,8 0,0 1,300 233L300,233A8,8 0,0 1,292 241L208,241A8,8 0,0 1,200 233L200,233A8,8 0,0 1,208 225z"
+        android:strokeAlpha="0.9"
+        android:fillColor="#8b5cf6"
+        android:fillAlpha="0.9"/>
+    <path
+        android:pathData="M189,258L291,258A9,9 0,0 1,300 267L300,267A9,9 0,0 1,291 276L189,276A9,9 0,0 1,180 267L180,267A9,9 0,0 1,189 258z"
+        android:strokeAlpha="0.9"
+        android:fillColor="#7c3aed"
+        android:fillAlpha="0.9"/>
+    <path
+        android:pathData="M367,195L433,195A7,7 0,0 1,440 202L440,202A7,7 0,0 1,433 209L367,209A7,7 0,0 1,360 202L360,202A7,7 0,0 1,367 195z"
+        android:strokeAlpha="0.9"
+        android:fillColor="#67e8f9"
+        android:fillAlpha="0.9"/>
+    <path
+        android:pathData="M368,225L472,225A8,8 0,0 1,480 233L480,233A8,8 0,0 1,472 241L368,241A8,8 0,0 1,360 233L360,233A8,8 0,0 1,368 225z"
+        android:strokeAlpha="0.9"
+        android:fillColor="#22d3ee"
+        android:fillAlpha="0.9"/>
+    <path
+        android:pathData="M369,258L431,258A9,9 0,0 1,440 267L440,267A9,9 0,0 1,431 276L369,276A9,9 0,0 1,360 267L360,267A9,9 0,0 1,369 258z"
+        android:strokeAlpha="0.9"
+        android:fillColor="#06b6d4"
+        android:fillAlpha="0.9"/>
+    <path
+        android:pathData="M330,120l230,130l-230,130z"
+        android:strokeLineJoin="round"
+        android:strokeWidth="22"
+        android:fillColor="#00000000">
+      <aapt:attr name="android:strokeColor">
+        <gradient
+            android:startX="330"
+            android:startY="120"
+            android:endX="560"
+            android:endY="380"
+            android:type="linear">
+          <item android:offset="0" android:color="#FFE8E8E8"/>
+          <item android:offset="0.3" android:color="#FFC0C0C0"/>
+          <item android:offset="0.6" android:color="#FFA0A0A0"/>
+          <item android:offset="1" android:color="#FFD0D0D0"/>
+        </gradient>
+      </aapt:attr>
+    </path>
+    <path
+        android:pathData="M330,120l230,130l-230,130z"
+        android:strokeAlpha="0.3"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:strokeColor="#ffffff"
+        android:fillAlpha="0.3"/>
+    <path
+        android:pathData="M368,225L472,225A8,8 0,0 1,480 233L480,233A8,8 0,0 1,472 241L368,241A8,8 0,0 1,360 233L360,233A8,8 0,0 1,368 225z"
+        android:strokeAlpha="0.95"
+        android:fillAlpha="0.95">
+      <aapt:attr name="android:fillColor">
+        <gradient
+            android:startX="360"
+            android:startY="225"
+            android:endX="480"
+            android:endY="225"
+            android:type="linear">
+          <item android:offset="0" android:color="#FFA855F7"/>
+          <item android:offset="0.5" android:color="#FF7C3AED"/>
+          <item android:offset="1" android:color="#FF22D3EE"/>
+        </gradient>
+      </aapt:attr>
+    </path>
+  </group>
+</vector>
