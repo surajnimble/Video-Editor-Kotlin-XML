@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <declare-styleable name="CameraCaptureButton">
+
+        <!-- ===== Colors ===== -->
+        <attr name="ccb_ringColorIdle" format="color" />
+        <attr name="ccb_ringColorRecording" format="color" />
+        <attr name="ccb_innerColorIdle" format="color" />
+        <attr name="ccb_innerColorRecording" format="color" />
+
+        <!-- ===== Shape / sizing ratios (all relative to the button's own radius, 0..1) ===== -->
+        <attr name="ccb_ringStrokeWidthRatio" format="float" />      <!-- default 0.09 -->
+        <attr name="ccb_innerRadiusRatioIdle" format="float" />      <!-- default 0.80 -->
+        <attr name="ccb_innerRadiusRatioRecording" format="float" /> <!-- default 0.55 -->
+        <attr name="ccb_ringGrowthRatio" format="float" />           <!-- how much the outer ring grows while recording, default 0.06 -->
+        <attr name="ccb_pressScale" format="float" />                <!-- inner circle scale on press-down, default 0.88 -->
+        <attr name="ccb_idleRingAlpha" format="integer" />           <!-- 0-255, default 200 -->
+        <attr name="ccb_recordingTrackAlpha" format="integer" />     <!-- 0-255, default 60 -->
+
+        <!-- ===== Timing ===== -->
+        <attr name="ccb_maxHoldMs" format="integer" />               <!-- max recording length, default 15000 -->
+        <attr name="ccb_longPressThresholdMs" format="integer" />    <!-- hold time before tap becomes record, default 200 -->
+
+        <!-- ===== Zoom ===== -->
+        <attr name="ccb_zoomEnabled" format="boolean" />
+        <attr name="ccb_zoomDragRange" format="dimension" />         <!-- drag distance to reach max zoom, default 220dp -->
+        <attr name="ccb_minZoomFactor" format="float" />             <!-- default 1.0 - overwrite at runtime with the real camera's value -->
+        <attr name="ccb_maxZoomFactor" format="float" />             <!-- default 4.0 - overwrite at runtime with the real camera's value -->
+
+        <!-- ===== Feature toggles ===== -->
+        <attr name="ccb_photoEnabled" format="boolean" />            <!-- tap-to-capture -->
+        <attr name="ccb_videoEnabled" format="boolean" />            <!-- hold-to-record -->
+        <attr name="ccb_hapticsEnabled" format="boolean" />
+        <attr name="ccb_pressAnimEnabled" format="boolean" />        <!-- press bounce -->
+        <attr name="ccb_recordPulseEnabled" format="boolean" />      <!-- outer ring growth while recording -->
+
+        <!-- ===== Design-time preview only (ignored at runtime / isInEditMode only) ===== -->
+        <attr name="ccb_previewState" format="enum">
+            <enum name="idle" value="0" />
+            <enum name="recording" value="1" />
+        </attr>
+        <attr name="ccb_previewProgress" format="float" />          <!-- 0..1, only used with ccb_previewState=recording -->
+
+    </declare-styleable>
+
+</resources>
