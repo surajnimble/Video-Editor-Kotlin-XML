@@ -13,6 +13,7 @@ import android.util.Log
 import com.app.videoeditor.core.EditorSticker
 import com.app.videoeditor.core.EditorText
 import com.app.videoeditor.core.OverlayItem
+import com.app.videoeditor.widget.TextStyles
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
@@ -123,23 +124,29 @@ class VideoExporter(private val context: Context) {
     private fun renderTextBitmap(item: EditorText, pixelSize: Int, density: Float): Bitmap {
         fun dp(v: Float) = v * density
 
+        val sizeMultiplier = if (item.textEffectId == "pop") 1.15f else 1f
+        val textSize = pixelSize.toFloat() * sizeMultiplier
+
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.CENTER
             style = Paint.Style.FILL_AND_STROKE
-            strokeWidth = dp(3f)
-            textSize = pixelSize.toFloat()
+            strokeWidth = textSize * 0.06f   // FIX: proportional, fixed dp(3f) nahi
+            this.textSize = textSize
+            typeface = TextStyles.byId(item.fontStyleId).typeface
+            letterSpacing = if (item.textEffectId == "typewriter") 0.12f else 0f
         }
 
-        val textWidth = paint.measureText(item.text)
-        val fontMetrics = paint.fontMetrics
-        val textHeight = fontMetrics.descent - fontMetrics.ascent
-        val boxPadding = dp(8f)
-        val cornerRadius = dp(8f)
+        val lines = item.text.split("\n").let { if (it.isEmpty()) listOf("") else it }
+        val lineWidths = lines.map { paint.measureText(it) }
+        val fm = paint.fontMetrics
+        val lineHeight = fm.descent - fm.ascent   // FIX: extra dp(4f) gap hataya
+        val padding = textSize * 0.18f            // FIX: proportional
+        val cornerRadius = textSize * 0.18f
 
-        // FIX: yehi wo missing piece tha — actual text-width + rotation-diagonal
-        // ke hisaab se bitmap size, bilkul DraggableTextView.onMeasure() jaisa.
-        // Isse lamba text ya rotated text ab bitmap ke bahar clip nahi hota.
-        val diagonal = hypot((textWidth + boxPadding * 2).toDouble(), (textHeight + boxPadding * 2).toDouble()).toFloat()
+        val blockWidth = (lineWidths.maxOrNull() ?: 0f) + padding * 2
+        val blockHeight = lineHeight * lines.size
+
+        val diagonal = hypot(blockWidth.toDouble(), blockHeight.toDouble()).toFloat()
         val safeSize = (diagonal + dp(24f)).roundToInt().coerceAtLeast(1)
 
         val bitmap = Bitmap.createBitmap(safeSize, safeSize, Bitmap.Config.ARGB_8888)
@@ -150,25 +157,42 @@ class VideoExporter(private val context: Context) {
         canvas.save()
         canvas.rotate(item.rotation, cx, cy)
 
-        val baseline = cy - (fontMetrics.ascent + fontMetrics.descent) / 2f
-        val bgLeft = cx - textWidth / 2f - boxPadding
-        val bgTop = baseline + fontMetrics.ascent - boxPadding
-        val bgRight = cx + textWidth / 2f + boxPadding
-        val bgBottom = baseline + fontMetrics.descent + boxPadding
+        lines.forEachIndexed { index, line ->
+            if (line.isBlank()) return@forEachIndexed   // FIX: khaali line skip
 
-        // FIX: background box ab export me bhi draw hota hai (pehle missing tha)
-        if (Color.alpha(item.backgroundColor) > 0) {
-            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = item.backgroundColor }
-            canvas.drawRoundRect(bgLeft, bgTop, bgRight, bgBottom, cornerRadius, cornerRadius, bgPaint)
+            val lineWidth = lineWidths[index]
+            val lineCenterY = cy - blockHeight / 2f + lineHeight * index + lineHeight / 2f
+
+            val xCenter = when (item.contentAlignment) {
+                0 -> cx - blockWidth / 2f + padding + lineWidth / 2f  // LEFT
+                2 -> cx + blockWidth / 2f - padding - lineWidth / 2f  // RIGHT
+                else -> cx                                             // CENTER
+            }
+            val yCenter = lineCenterY + if (item.textEffectId == "jump") {
+                if (index % 2 == 0) -dp(2f) else dp(2f)
+            } else 0f
+
+            val baseline = yCenter - (fm.ascent + fm.descent) / 2f
+
+            if (Color.alpha(item.backgroundColor) > 0) {
+                val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = item.backgroundColor }
+                canvas.drawRoundRect(
+                    xCenter - lineWidth / 2f - padding,
+                    yCenter - (fm.descent - fm.ascent) / 2f,
+                    xCenter + lineWidth / 2f + padding,
+                    yCenter + (fm.descent - fm.ascent) / 2f,
+                    cornerRadius, cornerRadius, bgPaint
+                )
+            }
+
+            paint.color = Color.BLACK
+            canvas.drawText(line, xCenter, baseline, paint)
+
+            paint.color = item.color
+            paint.style = Paint.Style.FILL
+            canvas.drawText(line, xCenter, baseline, paint)
+            paint.style = Paint.Style.FILL_AND_STROKE
         }
-
-        // FIX: black outline pass + color fill — widget jaisa hi look, preview == export
-        paint.color = Color.BLACK
-        canvas.drawText(item.text, cx, baseline, paint)
-
-        paint.color = item.color
-        paint.style = Paint.Style.FILL
-        canvas.drawText(item.text, cx, baseline, paint)
 
         canvas.restore()
         return bitmap

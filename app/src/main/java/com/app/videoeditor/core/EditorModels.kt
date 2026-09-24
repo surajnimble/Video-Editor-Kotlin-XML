@@ -22,7 +22,10 @@ data class EditorText(
     override val size: Float,
     override val rotation: Float,
     val color: Int = 0xFFFFFFFF.toInt(),
-    val backgroundColor: Int = 0xCC000000.toInt()
+    val backgroundColor: Int = 0xCC000000.toInt(),
+    val fontStyleId: String = "classic",
+    val textEffectId: String = "none",
+    val contentAlignment: Int = 1
 ) : OverlayItem()
 
 data class EditorState(

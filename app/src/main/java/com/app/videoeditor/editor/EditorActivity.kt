@@ -1,12 +1,10 @@
 package com.app.videoeditor.editor
 
 import android.annotation.SuppressLint
-import android.app.AlertDialog
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +15,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.recyclerview.widget.RecyclerView
 import com.app.videoeditor.R
 import com.app.videoeditor.core.EditorState
 import com.app.videoeditor.core.HistoryManager
@@ -26,12 +25,12 @@ class EditorActivity : AppCompatActivity() {
 
     private lateinit var playerView: PlayerView
     private lateinit var stickerOverlay: android.widget.FrameLayout
-    private lateinit var exportButton: TextView
     private lateinit var btnUndo: TextView
     private lateinit var btnRedo: TextView
 
     private var player: ExoPlayer? = null
     private var videoUri: Uri? = null
+    private var isExporting = false
 
     private lateinit var overlayManager: OverlayManager
     private val historyManager = HistoryManager<EditorState>()
@@ -70,14 +69,12 @@ class EditorActivity : AppCompatActivity() {
     private fun initViews() {
         playerView = findViewById(R.id.playerView)
         stickerOverlay = findViewById(R.id.stickerOverlay)
-        exportButton = findViewById(R.id.exportButton)
         btnUndo = findViewById(R.id.btnUndo)
         btnRedo = findViewById(R.id.btnRedo)
 
         findViewById<View>(R.id.backButton).setOnClickListener { finish() }
-        findViewById<View>(R.id.btnAddSticker).setOnClickListener { overlayManager.addSticker("😀") }
-        findViewById<View>(R.id.btnAddText).setOnClickListener { showAddTextDialog() }
-        exportButton.setOnClickListener { exportVideo() }
+
+        setupFeaturesRv()
 
         btnUndo.setOnClickListener {
             historyManager.undo()?.let { state -> overlayManager.restoreState(state); updateUndoRedoButtons() }
@@ -91,17 +88,36 @@ class EditorActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAddTextDialog() {
-        val input = EditText(this).apply { hint = "Enter text"; setText("Hello") }
-        AlertDialog.Builder(this)
-            .setTitle("Add Text")
-            .setView(input)
-            .setPositiveButton("Add") { _, _ ->
-                val text = input.text.toString().ifBlank { "Text" }
-                overlayManager.addText(text)
+    private fun setupFeaturesRv() {
+        val features = listOf(
+            FeatureItem("Text", R.drawable.ic_text),
+            FeatureItem("Sticker", R.drawable.ic_sticker_add),
+            FeatureItem("Music", R.drawable.ic_music_note_2_24dp_e3e3e3_fill0_wght200_grad0_opsz24),
+            FeatureItem("Filter", R.drawable.ic_filter),
+            FeatureItem("Draw", R.drawable.ic_draw),
+            FeatureItem("Download", R.drawable.ic_download)
+        )
+        val rv = findViewById<RecyclerView>(R.id.rvFeatures)
+        rv.setHasFixedSize(true)
+        rv.adapter = FeatureAdapter(features) { item ->
+            when (item.title) {
+                "Text" -> showAddTextDialog()
+                "Sticker" -> overlayManager.addSticker("😀")
+                "Download" -> exportVideo()
+                else -> Toast.makeText(this, "${item.title} - coming soon", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
+    }
+
+    private fun showAddTextDialog() {
+        // Dialog ke duran editor screen me sirf video + overlay dikhe, baaki
+        // UI (top bar/features) invisible rahe. Dismiss ho jaane par wapas.
+        findViewById<View>(R.id.topBar).visibility = View.INVISIBLE
+        findViewById<View>(R.id.rvFeatures).visibility = View.INVISIBLE
+        AddTextDialog(this, overlayManager) {
+            findViewById<View>(R.id.topBar).visibility = View.VISIBLE
+            findViewById<View>(R.id.rvFeatures).visibility = View.VISIBLE
+        }.show()
     }
 
     private fun setupOverlayManager() {
@@ -133,14 +149,14 @@ class EditorActivity : AppCompatActivity() {
     @SuppressLint("StaticFieldLeak")
     private fun exportVideo() {
         val uri = videoUri ?: return
-        exportButton.isEnabled = false
-        exportButton.text = "Exporting…"
+        if (isExporting) return
+        isExporting = true
+        Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
 
         val dims = queryVideoDimensions(uri)
         VideoExporter(this).export(uri, dims.first, dims.second, overlayManager.getCurrentState().items) { success, outputUri, message ->
             runOnUiThread {
-                exportButton.isEnabled = true
-                exportButton.text = "Export"
+                isExporting = false
                 Toast.makeText(this, if (success) "Saved to gallery ✓" else (message ?: "Export failed"), Toast.LENGTH_SHORT).show()
             }
         }

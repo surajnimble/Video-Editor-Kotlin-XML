@@ -9,51 +9,65 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.View.MeasureSpec
 import kotlin.math.atan2
 import kotlin.math.hypot
 
+/**
+ * Self-contained draggable / pinch-zoom / rotate MULTI-LINE text overlay.
+ * View hamesha poore parent jitni size leti hai; drawn content Matrix se
+ * move/scale/rotate hota hai onDraw() ke andar. Touch hit-testing inverse
+ * Matrix se hoti hai. Drawing View ki apni (=video canvas) bounds tak clip
+ * hoti hai, taaki zoom/rotate video ke bahar visually overflow na ho.
+ *
+ * Har line ka apna rounded background "pill" hota hai (textBackgroundColor),
+ * aur textAlignment (LEFT/CENTER/RIGHT) se lines ek doosre ke against
+ * horizontally align hoti hain -- bilkul dialog ke preview jaisa hi.
+ */
 class DraggableTextView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
+    companion object {
+        const val ALIGN_LEFT = 0
+        const val ALIGN_CENTER = 1
+        const val ALIGN_RIGHT = 2
+    }
+
     var displayText: String = "Text"
-        set(value) {
-            field = value; invalidate()
-        }
+        set(value) { field = value; invalidate() }
 
     var textColor: Int = 0xFFFFFFFF.toInt()
-        set(value) {
-            field = value; invalidate()
-        }
+        set(value) { field = value; invalidate() }
 
     var textBackgroundColor: Int = 0xCC000000.toInt()
-        set(value) {
-            field = value; invalidate()
-        }
+        set(value) { field = value; invalidate() }
 
     var fractionCenterX: Float = 0.5f
-        set(value) {
-            field = value.coerceIn(-1f, 2f); invalidate()
-        }
+        set(value) { field = value.coerceIn(-1f, 2f); invalidate() }
     var fractionCenterY: Float = 0.5f
-        set(value) {
-            field = value.coerceIn(-1f, 2f); invalidate()
-        }
+        set(value) { field = value.coerceIn(-1f, 2f); invalidate() }
 
     var fractionSize: Float = 0.15f
-        set(value) {
-            field = value.coerceIn(0.01f, 20f); invalidate()
-        }
+        set(value) { field = value.coerceIn(0.01f, 20f); invalidate() }
 
     var rotationDegrees: Float = 0f
-        set(value) {
-            field = value; invalidate()
-        }
+        set(value) { field = value; invalidate() }
+
+    var fontStyleId: String = "classic"
+        set(value) { field = value; invalidate() }
+
+    // NOTE: static visual variation hi hai -- TextEffects.kt ka comment dekho.
+    var textEffectId: String = "none"
+        set(value) { field = value; invalidate() }
+
+    /*var textAlignment: Int = ALIGN_CENTER
+        set(value) { field = value; invalidate() }*/
+    var contentAlignment: Int = ALIGN_CENTER
+        set(value) { field = value; invalidate() }
 
     var isItemActive: Boolean = false
-        set(value) {
-            field = value; invalidate()
-        }
+        set(value) { field = value; invalidate() }
 
     var onActionEnded: ((DraggableTextView) -> Unit)? = null
     var onTapped: ((DraggableTextView) -> Unit)? = null
@@ -67,6 +81,13 @@ class DraggableTextView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         color = 0xFF4A90E2.toInt()
     }
+
+    // Multi-line ke liye pre-computed per-line layout
+    private var lines: List<String> = listOf("Text")
+    private var lineWidths: List<Float> = listOf(0f)
+    private var lineHeight = 0f
+    private var blockWidth = 0f
+    private var blockHeight = 0f
 
     private var localBg = RectF()
     private var localTouch = RectF()
@@ -99,21 +120,26 @@ class DraggableTextView @JvmOverloads constructor(
     private fun rebuildGeometry() {
         if (width <= 0 || height <= 0) return
 
-        val drawSize = minOf(width, height) * fractionSize
+        // "Pop" effect -> thoda bada scale (static hint)
+        val sizeMultiplier = if (textEffectId == "pop") 1.15f else 1f
+        val drawSize = minOf(width, height) * fractionSize * sizeMultiplier
         textPaint.textSize = drawSize
         textPaint.strokeWidth = dp(3f)
+        textPaint.typeface = TextStyles.byId(fontStyleId).typeface
+        // "Typewriter" effect -> extra letter-spacing (static hint)
+        textPaint.letterSpacing = if (textEffectId == "typewriter") 0.12f else 0f
 
-        val textWidth = textPaint.measureText(displayText)
+        lines = displayText.split("\n").let { if (it.isEmpty()) listOf("") else it }
+        lineWidths = lines.map { textPaint.measureText(it) }
         val fm = textPaint.fontMetrics
-        val padding = dp(8f)
-        val baselineOffset = -(fm.ascent + fm.descent) / 2f
+        val lineSpacingExtra = dp(4f)
+        lineHeight = (fm.descent - fm.ascent) + lineSpacingExtra
 
-        localBg = RectF(
-            -textWidth / 2f - padding,
-            baselineOffset + fm.ascent - padding,
-            textWidth / 2f + padding,
-            baselineOffset + fm.descent + padding
-        )
+        val padding = dp(8f)
+        blockWidth = (lineWidths.maxOrNull() ?: 0f) + padding * 2
+        blockHeight = lineHeight * lines.size
+
+        localBg = RectF(-blockWidth / 2f, -blockHeight / 2f, blockWidth / 2f, blockHeight / 2f)
         localTouch = RectF(localBg)
 
         drawMatrix.reset()
@@ -132,24 +158,48 @@ class DraggableTextView @JvmOverloads constructor(
         canvas.concat(drawMatrix)
 
         val fm = textPaint.fontMetrics
-        val baseline = -(fm.ascent + fm.descent) / 2f
+        val padding = dp(8f)
+        val cornerRadius = dp(8f)
 
-        if (Color.alpha(textBackgroundColor) > 0) {
-            backgroundPaint.color = textBackgroundColor
-            canvas.drawRoundRect(localBg, dp(8f), dp(8f), backgroundPaint)
+        lines.forEachIndexed { index, line ->
+            val lineWidth = lineWidths[index]
+            val lineCenterY = -blockHeight / 2f + lineHeight * index + lineHeight / 2f
+
+            val xCenter = when (textAlignment) {
+                ALIGN_LEFT -> -blockWidth / 2f + padding + lineWidth / 2f
+                ALIGN_RIGHT -> blockWidth / 2f - padding - lineWidth / 2f
+                else -> 0f
+            }
+            // "Jump" effect -> alternate lines thoda upar/neeche (static zigzag hint)
+            val yCenter = lineCenterY + if (textEffectId == "jump") {
+                if (index % 2 == 0) -dp(2f) else dp(2f)
+            } else 0f
+
+            val baseline = yCenter - (fm.ascent + fm.descent) / 2f
+
+            if (line.isNotEmpty() && Color.alpha(textBackgroundColor) > 0) {
+                backgroundPaint.color = textBackgroundColor
+                canvas.drawRoundRect(
+                    xCenter - lineWidth / 2f - padding,
+                    yCenter - (fm.descent - fm.ascent) / 2f,
+                    xCenter + lineWidth / 2f + padding,
+                    yCenter + (fm.descent - fm.ascent) / 2f,
+                    cornerRadius, cornerRadius, backgroundPaint
+                )
+            }
+
+            textPaint.color = Color.BLACK
+            canvas.drawText(line, xCenter, baseline, textPaint)
+
+            textPaint.color = textColor
+            textPaint.style = Paint.Style.FILL
+            canvas.drawText(line, xCenter, baseline, textPaint)
+            textPaint.style = Paint.Style.FILL_AND_STROKE
         }
-
-        textPaint.color = Color.BLACK
-        canvas.drawText(displayText, 0f, baseline, textPaint)
-
-        textPaint.color = textColor
-        textPaint.style = Paint.Style.FILL
-        canvas.drawText(displayText, 0f, baseline, textPaint)
-        textPaint.style = Paint.Style.FILL_AND_STROKE
 
         if (isItemActive) {
             selectionPaint.strokeWidth = dp(2f)
-            canvas.drawRoundRect(localBg, dp(8f), dp(8f), selectionPaint)
+            canvas.drawRoundRect(localBg, cornerRadius, cornerRadius, selectionPaint)
         }
 
         canvas.restore()
@@ -222,10 +272,8 @@ class DraggableTextView @JvmOverloads constructor(
                         startFractionX = fractionCenterX
                         startFractionY = fractionCenterY
                     } else {
-                        val px = event.getX(primaryIndex);
-                        val py = event.getY(primaryIndex)
-                        val sx = event.getX(secondaryIndex);
-                        val sy = event.getY(secondaryIndex)
+                        val px = event.getX(primaryIndex); val py = event.getY(primaryIndex)
+                        val sx = event.getX(secondaryIndex); val sy = event.getY(secondaryIndex)
 
                         val curMidX = (px + sx) / 2f
                         val curMidY = (py + sy) / 2f
@@ -236,8 +284,7 @@ class DraggableTextView @JvmOverloads constructor(
                         fractionSize = startFractionSize * (dist / startPinchDistance)
 
                         val angleDiff = atan2(py - sy, px - sx) - startPinchAngle
-                        rotationDegrees =
-                            startRotation + Math.toDegrees(angleDiff.toDouble()).toFloat()
+                        rotationDegrees = startRotation + Math.toDegrees(angleDiff.toDouble()).toFloat()
 
                         invalidate()
                         return true
@@ -266,7 +313,6 @@ class DraggableTextView @JvmOverloads constructor(
                             startFractionY = fractionCenterY
                         }
                     }
-
                     liftedId == primaryPointerId && secondaryPointerId != MotionEvent.INVALID_POINTER_ID -> {
                         val promotedIndex = event.findPointerIndex(secondaryPointerId)
                         primaryPointerId = secondaryPointerId
@@ -279,7 +325,6 @@ class DraggableTextView @JvmOverloads constructor(
                             startFractionY = fractionCenterY
                         }
                     }
-
                     liftedId == primaryPointerId -> {
                         isDragging = false
                         isPinching = false
@@ -306,9 +351,7 @@ class DraggableTextView @JvmOverloads constructor(
         return super.onTouchEvent(event)
     }
 
-    override fun performClick(): Boolean {
-        super.performClick(); return true
-    }
+    override fun performClick(): Boolean { super.performClick(); return true }
 
     private fun dp(v: Float): Float = (v * resources.displayMetrics.density).coerceAtLeast(0f)
 }
