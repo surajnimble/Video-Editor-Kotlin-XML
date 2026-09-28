@@ -122,32 +122,27 @@ class VideoExporter(private val context: Context) {
     }
 
     private fun renderTextBitmap(item: EditorText, pixelSize: Int, density: Float): Bitmap {
-        fun dp(v: Float) = v * density
-
-        val sizeMultiplier = if (item.textEffectId == "pop") 1.15f else 1f
-        val textSize = pixelSize.toFloat() * sizeMultiplier
-
+        val size = pixelSize.toFloat()
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.CENTER
-            style = Paint.Style.FILL_AND_STROKE
-            strokeWidth = textSize * 0.06f   // FIX: proportional, fixed dp(3f) nahi
-            this.textSize = textSize
+            style = Paint.Style.FILL
+            textSize = size
             typeface = TextStyles.byId(item.fontStyleId).typeface
-            letterSpacing = if (item.textEffectId == "typewriter") 0.12f else 0f
         }
 
-        val lines = item.text.split("\n").let { if (it.isEmpty()) listOf("") else it }
+        val lines = item.text.split("\n")
         val lineWidths = lines.map { paint.measureText(it) }
         val fm = paint.fontMetrics
-        val lineHeight = fm.descent - fm.ascent   // FIX: extra dp(4f) gap hataya
-        val padding = textSize * 0.18f            // FIX: proportional
-        val cornerRadius = textSize * 0.18f
+        val lineHeight = fm.descent - fm.ascent
+        val hPad = size * 0.67f
+        val vPad = size * 0.25f
+        val cornerRadius = size * 0.33f
 
-        val blockWidth = (lineWidths.maxOrNull() ?: 0f) + padding * 2
-        val blockHeight = lineHeight * lines.size
+        val blockWidth = (lineWidths.maxOrNull() ?: 0f) + hPad * 2
+        val blockHeight = lineHeight * lines.size + vPad * 2
 
         val diagonal = hypot(blockWidth.toDouble(), blockHeight.toDouble()).toFloat()
-        val safeSize = (diagonal + dp(24f)).roundToInt().coerceAtLeast(1)
+        val safeSize = (diagonal + 24f * density).roundToInt().coerceAtLeast(1)
 
         val bitmap = Bitmap.createBitmap(safeSize, safeSize, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -157,41 +152,30 @@ class VideoExporter(private val context: Context) {
         canvas.save()
         canvas.rotate(item.rotation, cx, cy)
 
-        lines.forEachIndexed { index, line ->
-            if (line.isBlank()) return@forEachIndexed   // FIX: khaali line skip
+        fun centerX(i: Int): Float = when (item.contentAlignment) {
+            0 -> cx - blockWidth / 2f + hPad + lineWidths[i] / 2f   // LEFT
+            2 -> cx + blockWidth / 2f - hPad - lineWidths[i] / 2f   // RIGHT
+            else -> cx                                               // CENTER
+        }
+        fun centerY(i: Int): Float = cy - blockHeight / 2f + vPad + lineHeight * i + lineHeight / 2f
 
-            val lineWidth = lineWidths[index]
-            val lineCenterY = cy - blockHeight / 2f + lineHeight * index + lineHeight / 2f
-
-            val xCenter = when (item.contentAlignment) {
-                0 -> cx - blockWidth / 2f + padding + lineWidth / 2f  // LEFT
-                2 -> cx + blockWidth / 2f - padding - lineWidth / 2f  // RIGHT
-                else -> cx                                             // CENTER
-            }
-            val yCenter = lineCenterY + if (item.textEffectId == "jump") {
-                if (index % 2 == 0) -dp(2f) else dp(2f)
-            } else 0f
-
-            val baseline = yCenter - (fm.ascent + fm.descent) / 2f
-
-            if (Color.alpha(item.backgroundColor) > 0) {
-                val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = item.backgroundColor }
+         if (Color.alpha(item.backgroundColor) > 0) {
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = item.backgroundColor }
+            lines.forEachIndexed { i, line ->
+                if (line.isBlank()) return@forEachIndexed
+                val x = centerX(i); val y = centerY(i)
                 canvas.drawRoundRect(
-                    xCenter - lineWidth / 2f - padding,
-                    yCenter - (fm.descent - fm.ascent) / 2f,
-                    xCenter + lineWidth / 2f + padding,
-                    yCenter + (fm.descent - fm.ascent) / 2f,
+                    x - lineWidths[i] / 2f - hPad, y - lineHeight / 2f - vPad,
+                    x + lineWidths[i] / 2f + hPad, y + lineHeight / 2f + vPad,
                     cornerRadius, cornerRadius, bgPaint
                 )
             }
+        }
 
-            paint.color = Color.BLACK
-            canvas.drawText(line, xCenter, baseline, paint)
-
-            paint.color = item.color
-            paint.style = Paint.Style.FILL
-            canvas.drawText(line, xCenter, baseline, paint)
-            paint.style = Paint.Style.FILL_AND_STROKE
+        paint.color = item.color
+        lines.forEachIndexed { i, line ->
+            if (line.isBlank()) return@forEachIndexed
+            canvas.drawText(line, centerX(i), centerY(i) - (fm.ascent + fm.descent) / 2f, paint)
         }
 
         canvas.restore()

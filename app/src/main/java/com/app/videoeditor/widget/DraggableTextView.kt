@@ -86,6 +86,8 @@ class DraggableTextView @JvmOverloads constructor(
     private var lines: List<String> = listOf("Text")
     private var lineWidths: List<Float> = listOf(0f)
     private var lineHeight = 0f
+    private var hPad = 0f
+    private var vPad = 0f
     private var blockWidth = 0f
     private var blockHeight = 0f
 
@@ -120,24 +122,21 @@ class DraggableTextView @JvmOverloads constructor(
     private fun rebuildGeometry() {
         if (width <= 0 || height <= 0) return
 
-        // "Pop" effect -> thoda bada scale (static hint)
-        val sizeMultiplier = if (textEffectId == "pop") 1.15f else 1f
-        val drawSize = minOf(width, height) * fractionSize * sizeMultiplier
+        val drawSize = minOf(width, height) * fractionSize
         textPaint.textSize = drawSize
-        textPaint.strokeWidth = dp(3f)
+        textPaint.style = Paint.Style.FILL          // black outline hata diya
         textPaint.typeface = TextStyles.byId(fontStyleId).typeface
-        // "Typewriter" effect -> extra letter-spacing (static hint)
-        textPaint.letterSpacing = if (textEffectId == "typewriter") 0.12f else 0f
 
-        lines = displayText.split("\n").let { if (it.isEmpty()) listOf("") else it }
+        lines = displayText.split("\n")
         lineWidths = lines.map { textPaint.measureText(it) }
         val fm = textPaint.fontMetrics
-        val lineSpacingExtra = dp(4f)
-        lineHeight = (fm.descent - fm.ascent) + lineSpacingExtra
+        lineHeight = fm.descent - fm.ascent          // extra line-gap hata diya
 
-        val padding = dp(8f)
-        blockWidth = (lineWidths.maxOrNull() ?: 0f) + padding * 2
-        blockHeight = lineHeight * lines.size
+        // Dialog ke (16dp / 6dp at 24sp) jaise ratios
+        hPad = drawSize * 0.67f
+        vPad = drawSize * 0.25f
+        blockWidth = (lineWidths.maxOrNull() ?: 0f) + hPad * 2
+        blockHeight = lineHeight * lines.size + vPad * 2
 
         localBg = RectF(-blockWidth / 2f, -blockHeight / 2f, blockWidth / 2f, blockHeight / 2f)
         localTouch = RectF(localBg)
@@ -158,43 +157,34 @@ class DraggableTextView @JvmOverloads constructor(
         canvas.concat(drawMatrix)
 
         val fm = textPaint.fontMetrics
-        val padding = dp(8f)
-        val cornerRadius = dp(8f)
+        val cornerRadius = textPaint.textSize * 0.33f
 
-        lines.forEachIndexed { index, line ->
-            val lineWidth = lineWidths[index]
-            val lineCenterY = -blockHeight / 2f + lineHeight * index + lineHeight / 2f
+        fun centerX(i: Int): Float = when (contentAlignment) {   // contentAlignment, textAlignment nahi
+            ALIGN_LEFT -> -blockWidth / 2f + hPad + lineWidths[i] / 2f
+            ALIGN_RIGHT -> blockWidth / 2f - hPad - lineWidths[i] / 2f
+            else -> 0f
+        }
+        fun centerY(i: Int): Float = -blockHeight / 2f + vPad + lineHeight * i + lineHeight / 2f
 
-            val xCenter = when (textAlignment) {
-                ALIGN_LEFT -> -blockWidth / 2f + padding + lineWidth / 2f
-                ALIGN_RIGHT -> blockWidth / 2f - padding - lineWidth / 2f
-                else -> 0f
-            }
-            // "Jump" effect -> alternate lines thoda upar/neeche (static zigzag hint)
-            val yCenter = lineCenterY + if (textEffectId == "jump") {
-                if (index % 2 == 0) -dp(2f) else dp(2f)
-            } else 0f
-
-            val baseline = yCenter - (fm.ascent + fm.descent) / 2f
-
-            if (line.isNotEmpty() && Color.alpha(textBackgroundColor) > 0) {
-                backgroundPaint.color = textBackgroundColor
+        // Pass 1: saare backgrounds (overlapping pills = connected blob)
+        if (Color.alpha(textBackgroundColor) > 0) {
+            backgroundPaint.color = textBackgroundColor
+            lines.forEachIndexed { i, line ->
+                if (line.isBlank()) return@forEachIndexed
+                val cx = centerX(i); val cy = centerY(i)
                 canvas.drawRoundRect(
-                    xCenter - lineWidth / 2f - padding,
-                    yCenter - (fm.descent - fm.ascent) / 2f,
-                    xCenter + lineWidth / 2f + padding,
-                    yCenter + (fm.descent - fm.ascent) / 2f,
+                    cx - lineWidths[i] / 2f - hPad, cy - lineHeight / 2f - vPad,
+                    cx + lineWidths[i] / 2f + hPad, cy + lineHeight / 2f + vPad,
                     cornerRadius, cornerRadius, backgroundPaint
                 )
             }
+        }
 
-            textPaint.color = Color.BLACK
-            canvas.drawText(line, xCenter, baseline, textPaint)
-
-            textPaint.color = textColor
-            textPaint.style = Paint.Style.FILL
-            canvas.drawText(line, xCenter, baseline, textPaint)
-            textPaint.style = Paint.Style.FILL_AND_STROKE
+        // Pass 2: saara text, backgrounds ke upar
+        textPaint.color = textColor
+        lines.forEachIndexed { i, line ->
+            if (line.isBlank()) return@forEachIndexed
+            canvas.drawText(line, centerX(i), centerY(i) - (fm.ascent + fm.descent) / 2f, textPaint)
         }
 
         if (isItemActive) {

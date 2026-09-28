@@ -28,10 +28,12 @@ class OverlayManager(
         backgroundColor: Int = 0xCC000000.toInt(),
         fontStyleId: String = "classic",
         textEffectId: String = "none",
-        contentAlignment: Int = DraggableTextView.ALIGN_CENTER
+        contentAlignment: Int = DraggableTextView.ALIGN_CENTER,
+        fractionSize: Float = 0.15f
     ) {
         val view = DraggableTextView(context).apply {
-            this.displayText = text; fractionCenterX = 0.5f; fractionCenterY = 0.5f; fractionSize = 0.15f
+            this.displayText = text; fractionCenterX = 0.5f; fractionCenterY = 0.5f
+            this.fractionSize = fractionSize
             this.textColor = textColor
             this.textBackgroundColor = backgroundColor
             this.fontStyleId = fontStyleId
@@ -40,7 +42,7 @@ class OverlayManager(
             onActionEnded = { saveState() }
             onTapped = { selectView(it) }
         }
-        addItem(view, EditorText(text, 0.5f, 0.5f, 0.15f, 0f, textColor, backgroundColor, fontStyleId, textEffectId, contentAlignment))
+        addItem(view, EditorText(text, 0.5f, 0.5f, fractionSize, 0f, textColor, backgroundColor, fontStyleId, textEffectId, contentAlignment))
     }
 
     private fun addItem(view: View, item: OverlayItem) {
@@ -58,7 +60,7 @@ class OverlayManager(
                 is StickerView -> EditorSticker(view.emoji, view.fractionCenterX, view.fractionCenterY, view.fractionSize, view.rotationDegrees)
                 is DraggableTextView -> EditorText(
                     view.displayText, view.fractionCenterX, view.fractionCenterY, view.fractionSize, view.rotationDegrees,
-                    view.textColor, view.textBackgroundColor, view.fontStyleId, view.textEffectId, view.textAlignment
+                    view.textColor, view.textBackgroundColor, view.fontStyleId, view.textEffectId, view.contentAlignment
                 )
                 else -> null
             }
@@ -87,7 +89,7 @@ class OverlayManager(
                         textBackgroundColor = item.backgroundColor
                         fontStyleId = item.fontStyleId
                         textEffectId = item.textEffectId
-                        textAlignment = item.contentAlignment
+                        contentAlignment = item.contentAlignment
                         onActionEnded = { saveState() }
                         onTapped = { selectView(it) }
                     }

@@ -103,7 +103,7 @@ class AddTextDialog(
 
         val lineBgSpan = RoundedLineBackgroundSpan(
             backgroundColor = currentBackgroundColor,
-            cornerRadius = dpToPx(18f), horizontalPadding = dpToPx(16f), verticalPadding = dpToPx(6f),
+            cornerRadius = dpToPx(8f), horizontalPadding = dpToPx(16f), verticalPadding = dpToPx(6f),
             alignment = alignCycle
         )
 
@@ -205,7 +205,15 @@ class AddTextDialog(
         showFontPanel()
 
         dialog.findViewById<View>(R.id.btnDone).setOnClickListener {
-            val text = etText.text.toString().ifBlank { "Text" }
+            val layout = etText.layout
+            val fullText = etText.text.toString()
+            val visualText = if (layout != null && layout.lineCount > 0) {
+                (0 until layout.lineCount).joinToString("\n") { i ->
+                    fullText.substring(layout.getLineStart(i), layout.getLineEnd(i)).trimEnd('\n', ' ')
+                }
+            } else fullText
+            val text = visualText.ifBlank { "Text" }
+
             val alignmentInt = when (alignCycle) {
                 0 -> DraggableTextView.ALIGN_LEFT
                 2 -> DraggableTextView.ALIGN_RIGHT
