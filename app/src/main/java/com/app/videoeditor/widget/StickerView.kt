@@ -1,10 +1,19 @@
 package com.app.videoeditor.widget
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -13,14 +22,11 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 
 /**
- * Self-contained draggable / pinch-zoom / rotate emoji sticker overlay.
- * Same design as DraggableTextView: this View always fills its parent
- * completely; only the drawn content moves via a Matrix inside onDraw().
- * Touch hit-testing inverse-transforms the touch point through the same
- * Matrix, so grabbing correctly follows rotation. Drawing is clipped to
- * the View's own (= video canvas) bounds, so zoom/rotate never visually
- * overflows past the video edge, even though the underlying position data
- * can still exceed 0..1 (edge crossing).
+ * Draggable / pinch-zoom / rotate sticker overlay. Emoji (text) OR ek image/GIF
+ * dono support karta hai -- jo bhi set ho wo draw hota hai (imageUri priority
+ * leta hai). GIF automatically animate hoti hai (ImageDecoder ka
+ * AnimatedImageDrawable, API 28+ ka built-in feature -- koi extra library
+ * nahi chahiye).
  */
 class StickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -28,6 +34,16 @@ class StickerView @JvmOverloads constructor(
 
     var emoji: String = ""
         set(value) { field = value; invalidate() }
+
+    // Set karte hi background thread par decode hoti hai; imageUri = null karne
+    // par wapas emoji mode par chali jaati hai.
+    var imageUri: Uri? = null
+        set(value) {
+            field = value
+            stickerDrawable = null
+            if (value != null) loadDrawable(value)
+            invalidate()
+        }
 
     var fractionCenterX: Float = 0.5f
         set(value) { field = value.coerceIn(-1f, 2f); invalidate() }
@@ -52,7 +68,10 @@ class StickerView @JvmOverloads constructor(
         color = 0xFF4A90E2.toInt()
     }
 
-    // Local (unrotated, untranslated) bounds of the drawn glyph, centered on (0,0).
+    private var stickerDrawable: Drawable? = null
+    private var drawableAspect = 1f // width/height, decode hone tak default square
+
+    // Local (unrotated, untranslated) bounds, centered on (0,0).
     private var localBounds = RectF()
     private val drawMatrix = Matrix()
     private val inverseMatrix = Matrix()
@@ -71,7 +90,6 @@ class StickerView @JvmOverloads constructor(
     private var primaryPointerId = MotionEvent.INVALID_POINTER_ID
     private var secondaryPointerId = MotionEvent.INVALID_POINTER_ID
 
-    // Hamesha poore parent jitna size -- yehi is design ka core hai.
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
     }
@@ -81,25 +99,60 @@ class StickerView @JvmOverloads constructor(
         rebuildGeometry()
     }
 
+    private fun loadDrawable(uri: Uri) {
+        val requestedUri = uri
+        Thread {
+            val drawable = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                    ImageDecoder.decodeDrawable(source)
+                } else {
+                    context.contentResolver.openInputStream(uri)?.use {
+                        BitmapDrawable(resources, BitmapFactory.decodeStream(it))
+                    }
+                }
+            } catch (e: Exception) { null }
+
+            post {
+                // Race guard: is dauraan imageUri kahin aur na badal gayi ho
+                if (imageUri != requestedUri || drawable == null) return@post
+                drawable.callback = object : Drawable.Callback {
+                    override fun invalidateDrawable(who: Drawable) { invalidate() }
+                    override fun scheduleDrawable(who: Drawable, what: Runnable, atTime: Long) {
+                        Handler(Looper.getMainLooper()).postAtTime(what, atTime)
+                    }
+                    override fun unscheduleDrawable(who: Drawable, what: Runnable) {
+                        Handler(Looper.getMainLooper()).removeCallbacks(what)
+                    }
+                }
+                if (drawable is Animatable) (drawable as Animatable).start()
+                drawableAspect = drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.toFloat().coerceAtLeast(1f)
+                stickerDrawable = drawable
+                requestLayout()
+                invalidate()
+            }
+        }.start()
+    }
+
     private fun rebuildGeometry() {
         if (width <= 0 || height <= 0) return
 
         val drawSize = minOf(width, height) * fractionSize
-        emojiPaint.textSize = drawSize
+        val drawable = stickerDrawable
 
-        val glyphWidth = emojiPaint.measureText(emoji)
-        val fm = emojiPaint.fontMetrics
-        val baselineOffset = -(fm.ascent + fm.descent) / 2f
-
-        // Tight bounds -- exactly jitna glyph visually occupy karta hai,
-        // koi extra invisible touch-margin nahi (glyph ke bahar tap karne
-        // par sticker select nahi hoga).
-        localBounds = RectF(
-            -glyphWidth / 2f,
-            baselineOffset + fm.ascent,
-            glyphWidth / 2f,
-            baselineOffset + fm.descent
-        )
+        if (drawable != null) {
+            // Aspect-fit box jitna drawSize
+            val w: Float; val h: Float
+            if (drawableAspect >= 1f) { w = drawSize; h = drawSize / drawableAspect }
+            else { h = drawSize; w = drawSize * drawableAspect }
+            localBounds = RectF(-w / 2f, -h / 2f, w / 2f, h / 2f)
+        } else {
+            emojiPaint.textSize = drawSize
+            val glyphWidth = emojiPaint.measureText(emoji)
+            val fm = emojiPaint.fontMetrics
+            val baselineOffset = -(fm.ascent + fm.descent) / 2f
+            localBounds = RectF(-glyphWidth / 2f, baselineOffset + fm.ascent, glyphWidth / 2f, baselineOffset + fm.descent)
+        }
 
         drawMatrix.reset()
         drawMatrix.postRotate(rotationDegrees)
@@ -113,14 +166,21 @@ class StickerView @JvmOverloads constructor(
         rebuildGeometry()
 
         canvas.save()
-        // Video-canvas boundary ke bahar visually overflow na ho, isliye
-        // drawing ko View ke apne (0,0,width,height) tak hi clip karte hain.
         canvas.clipRect(0f, 0f, width.toFloat(), height.toFloat())
         canvas.concat(drawMatrix)
 
-        val fm = emojiPaint.fontMetrics
-        val baseline = -(fm.ascent + fm.descent) / 2f
-        canvas.drawText(emoji, 0f, baseline, emojiPaint)
+        val drawable = stickerDrawable
+        if (drawable != null) {
+            drawable.setBounds(
+                localBounds.left.toInt(), localBounds.top.toInt(),
+                localBounds.right.toInt(), localBounds.bottom.toInt()
+            )
+            drawable.draw(canvas)
+        } else {
+            val fm = emojiPaint.fontMetrics
+            val baseline = -(fm.ascent + fm.descent) / 2f
+            canvas.drawText(emoji, 0f, baseline, emojiPaint)
+        }
 
         if (isStickerSelected) {
             selectionPaint.strokeWidth = dp(2f)
@@ -165,9 +225,6 @@ class StickerView @JvmOverloads constructor(
                 val primaryIndex = event.findPointerIndex(primaryPointerId)
                 if (primaryIndex == -1) return true
 
-                // Dusri finger sticker ke upar hona zaroori nahi -- pehli
-                // finger sticker ko pakde hue hai, dusri kahin bhi ho pinch
-                // kaam karega.
                 secondaryPointerId = event.getPointerId(newIndex)
                 isPinching = true
 
@@ -242,8 +299,6 @@ class StickerView @JvmOverloads constructor(
                         }
                     }
                     liftedId == primaryPointerId && secondaryPointerId != MotionEvent.INVALID_POINTER_ID -> {
-                        // Primary uthhi lekin dusri abhi neeche hai -> usi ko
-                        // naya primary banao, gesture seamlessly continue.
                         val promotedIndex = event.findPointerIndex(secondaryPointerId)
                         primaryPointerId = secondaryPointerId
                         secondaryPointerId = MotionEvent.INVALID_POINTER_ID

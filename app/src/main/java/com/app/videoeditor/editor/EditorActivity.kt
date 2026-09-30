@@ -20,6 +20,8 @@ import com.app.videoeditor.R
 import com.app.videoeditor.core.EditorState
 import com.app.videoeditor.core.HistoryManager
 import com.app.videoeditor.core.OverlayManager
+import android.content.Intent
+import androidx.activity.result.contract.ActivityResultContracts
 
 class EditorActivity : AppCompatActivity() {
 
@@ -34,6 +36,17 @@ class EditorActivity : AppCompatActivity() {
 
     private lateinit var overlayManager: OverlayManager
     private val historyManager = HistoryManager<EditorState>()
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            try {
+                contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: SecurityException) {
+                // Provider ne persistable permission nahi di -- is session ke liye
+                // Uri phir bhi kaam karegi, bas app restart ke baad access nahi rahega.
+            }
+            overlayManager.addSticker(imageUri = it.toString())
+        }
+    }
 
     companion object {
         const val EXTRA_VIDEO_URI = "extra_video_uri"
@@ -102,7 +115,7 @@ class EditorActivity : AppCompatActivity() {
         rv.adapter = FeatureAdapter(features) { item ->
             when (item.title) {
                 "Text" -> showAddTextDialog()
-                "Sticker" -> overlayManager.addSticker("😀")
+                "Sticker" -> showStickerSheet()
                 "Download" -> exportVideo()
                 else -> Toast.makeText(this, "${item.title} - coming soon", Toast.LENGTH_SHORT).show()
             }
@@ -118,6 +131,16 @@ class EditorActivity : AppCompatActivity() {
             findViewById<View>(R.id.topBar).visibility = View.VISIBLE
             findViewById<View>(R.id.rvFeatures).visibility = View.VISIBLE
         }.show()
+    }
+
+    private fun showStickerSheet() {
+        StickerBottomSheet(
+            context = this,
+            items = StickerCatalog.all(this),
+            onEmojiPicked = { emoji -> overlayManager.addSticker(emoji = emoji) },
+            onImagePicked = { uri -> overlayManager.addSticker(imageUri = uri.toString()) },
+            onPickFromGallery = { pickImageLauncher.launch("image/*") }
+        ).show()
     }
 
     private fun setupOverlayManager() {

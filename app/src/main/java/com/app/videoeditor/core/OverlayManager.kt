@@ -1,6 +1,7 @@
 package com.app.videoeditor.core
 
 import android.content.Context
+import android.net.Uri
 import android.view.View
 import android.widget.FrameLayout
 import com.app.videoeditor.widget.DraggableTextView
@@ -13,13 +14,16 @@ class OverlayManager(
 ) {
     private val views = mutableMapOf<View, OverlayItem>()
 
-    fun addSticker(emoji: String) {
+    fun addSticker(emoji: String = "", imageUri: String? = null, fractionSize: Float = 0.18f) {
         val view = StickerView(context).apply {
-            this.emoji = emoji; fractionCenterX = 0.5f; fractionCenterY = 0.5f; fractionSize = 0.18f
+            this.emoji = emoji
+            this.imageUri = imageUri?.let { Uri.parse(it) }
+            fractionCenterX = 0.5f; fractionCenterY = 0.5f
+            this.fractionSize = fractionSize
             onActionEnded = { saveState() }
             onTapped = { selectView(it) }
         }
-        addItem(view, EditorSticker(emoji, 0.5f, 0.5f, 0.18f, 0f))
+        addItem(view, EditorSticker(emoji, imageUri, 0.5f, 0.5f, fractionSize, 0f))
     }
 
     fun addText(
@@ -57,7 +61,10 @@ class OverlayManager(
     fun getCurrentState(): EditorState {
         val items = views.mapNotNull { (view, item) ->
             when (view) {
-                is StickerView -> EditorSticker(view.emoji, view.fractionCenterX, view.fractionCenterY, view.fractionSize, view.rotationDegrees)
+                is StickerView -> EditorSticker(
+                    view.emoji, view.imageUri?.toString(),
+                    view.fractionCenterX, view.fractionCenterY, view.fractionSize, view.rotationDegrees
+                )
                 is DraggableTextView -> EditorText(
                     view.displayText, view.fractionCenterX, view.fractionCenterY, view.fractionSize, view.rotationDegrees,
                     view.textColor, view.textBackgroundColor, view.fontStyleId, view.textEffectId, view.contentAlignment
@@ -75,7 +82,9 @@ class OverlayManager(
             when (item) {
                 is EditorSticker -> {
                     val view = StickerView(context).apply {
-                        this.emoji = item.emoji; fractionCenterX = item.centerX; fractionCenterY = item.centerY
+                        this.emoji = item.emoji
+                        this.imageUri = item.imageUri?.let { Uri.parse(it) }
+                        fractionCenterX = item.centerX; fractionCenterY = item.centerY
                         fractionSize = item.size; rotationDegrees = item.rotation
                         onActionEnded = { saveState() }
                         onTapped = { selectView(it) }

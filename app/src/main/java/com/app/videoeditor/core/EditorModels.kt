@@ -8,7 +8,8 @@ sealed class OverlayItem {
 }
 
 data class EditorSticker(
-    val emoji: String,
+    val emoji: String = "",
+    val imageUri: String? = null,
     override val centerX: Float,
     override val centerY: Float,
     override val size: Float,
