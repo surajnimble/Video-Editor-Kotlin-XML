@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="TrimTimelineView">
+        <attr name="ttFrameColor" format="color" />
+        <attr name="ttFrameCornerRadius" format="dimension" />
+        <attr name="ttFrameStrokeWidthH" format="dimension" />
+        <attr name="ttFrameStrokeWidthV" format="dimension" />
+        <attr name="ttInnerColor" format="color" />
+
+        <attr name="ttStripHeight" format="dimension" />
+        <attr name="ttThumbSpacing" format="dimension" />
+        <attr name="ttThumbCornerRadius" format="dimension" />
+        <attr name="ttThumbMarginLeft" format="dimension" />
+        <attr name="ttThumbMarginTop" format="dimension" />
+        <attr name="ttThumbMarginRight" format="dimension" />
+        <attr name="ttThumbMarginBottom" format="dimension" />
+
+        <attr name="ttHandleWidth" format="dimension" />
+        <attr name="ttHandleHeight" format="dimension" />
+        <attr name="ttHandleCornerRadius" format="dimension" />
+        <attr name="ttHandleColor" format="color" />
+        <attr name="ttHandleMarginStart" format="dimension" />
+        <attr name="ttHandleMarginEnd" format="dimension" />
+        <attr name="ttLeftHandle" format="reference" />
+        <attr name="ttRightHandle" format="reference" />
+
+        <attr name="ttPlayheadWidth" format="dimension" />
+        <attr name="ttPlayheadHeight" format="dimension" />
+        <attr name="ttPlayheadCornerRadius" format="dimension" />
+        <attr name="ttPlayheadColor" format="color" />
+        <attr name="ttShowPlayhead" format="boolean" />
+        <attr name="ttPlayheadIcon" format="reference" />
+
+        <attr name="ttShowDim" format="boolean" />
+        <attr name="ttDimColor" format="color" />
+
+        <attr name="ttBubbleShow" format="boolean" />
+        <attr name="ttBubbleColor" format="color" />
+        <attr name="ttBubbleTextColor" format="color" />
+        <attr name="ttBubbleTextSize" format="dimension" />
+        <attr name="ttBubbleCornerRadius" format="dimension" />
+        <attr name="ttBubbleStrokeWidth" format="dimension" />
+        <attr name="ttBubbleStrokeColor" format="color" />
+        <attr name="ttBubbleMarginY" format="dimension" />
+
+        <attr name="ttMinTrimSeconds" format="float" />
+    </declare-styleable>
+</resources>

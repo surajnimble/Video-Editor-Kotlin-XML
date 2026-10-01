@@ -47,6 +47,9 @@ class EditorActivity : AppCompatActivity() {
             overlayManager.addSticker(imageUri = it.toString())
         }
     }
+    private var musicPlayer: ExoPlayer? = null
+    private var selectedMusicUri: Uri? = null
+    private var isOriginalAudioMuted = false
 
     companion object {
         const val EXTRA_VIDEO_URI = "extra_video_uri"
@@ -106,6 +109,7 @@ class EditorActivity : AppCompatActivity() {
             FeatureItem("Text", R.drawable.ic_text),
             FeatureItem("Sticker", R.drawable.ic_sticker_add),
             FeatureItem("Music", R.drawable.ic_music_note_2_24dp_e3e3e3_fill0_wght200_grad0_opsz24),
+            FeatureItem("Mute", android.R.drawable.ic_lock_silent_mode),
             FeatureItem("Filter", R.drawable.ic_filter),
             FeatureItem("Draw", R.drawable.ic_draw),
             FeatureItem("Download", R.drawable.ic_download)
@@ -116,6 +120,8 @@ class EditorActivity : AppCompatActivity() {
             when (item.title) {
                 "Text" -> showAddTextDialog()
                 "Sticker" -> showStickerSheet()
+                "Music" -> showMusicSheet()
+                "Mute" -> toggleMuteOriginalAudio()
                 "Download" -> exportVideo()
                 else -> Toast.makeText(this, "${item.title} - coming soon", Toast.LENGTH_SHORT).show()
             }
@@ -141,6 +147,62 @@ class EditorActivity : AppCompatActivity() {
             onImagePicked = { uri -> overlayManager.addSticker(imageUri = uri.toString()) },
             onPickFromGallery = { pickImageLauncher.launch("image/*") }
         ).show()
+    }
+
+    private fun showMusicSheet() {
+        val wasPlaying = musicPlayer?.isPlaying == true
+        musicPlayer?.pause()
+
+        MusicBottomSheet(
+            context = this,
+            songs = MusicCatalog.all(this),
+            onPicked = { song ->
+                if (song == null) {
+                    selectedMusicUri = null
+                    setupMusicPreview()
+                    Toast.makeText(this, "Music removed", Toast.LENGTH_SHORT).show()
+                } else {
+                    AudioTrimDialog(
+                        activity = this,
+                        audioUri = song.uri,
+                        onTrimmed = { trimmedFile ->
+                            selectedMusicUri = Uri.fromFile(trimmedFile)
+                            setupMusicPreview()
+                            Toast.makeText(this, "${song.title} added", Toast.LENGTH_SHORT).show()
+                        },
+                        onCancelled = {
+                            if (wasPlaying) musicPlayer?.play()
+                        }
+                    ).show()
+                }
+            },
+            onCancelled = {
+                // FIX: bottom sheet khud hi band ho gayi, bina kuch pick kiye --
+                // purana music wapas resume karo.
+                if (wasPlaying) musicPlayer?.play()
+            }
+        ).show()
+    }
+
+    private fun toggleMuteOriginalAudio() {
+        isOriginalAudioMuted = !isOriginalAudioMuted
+        player?.volume = if (isOriginalAudioMuted) 0f else 1f
+        Toast.makeText(this, if (isOriginalAudioMuted) "Original audio muted" else "Original audio unmuted", Toast.LENGTH_SHORT).show()
+    }
+
+    // NOTE: yeh sirf PREVIEW ke liye hai -- music video ke saath best-effort
+    // loop hoke bajegi (perfectly frame-sync nahi hai), lekin asli mixing
+    // export ke time FFmpeg karta hai (VideoExporter me).
+    private fun setupMusicPreview() {
+        musicPlayer?.release()
+        musicPlayer = null
+        val uri = selectedMusicUri ?: return
+        musicPlayer = ExoPlayer.Builder(this).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            repeatMode = Player.REPEAT_MODE_ONE
+            playWhenReady = true
+            prepare()
+        }
     }
 
     private fun setupOverlayManager() {
@@ -177,7 +239,10 @@ class EditorActivity : AppCompatActivity() {
         Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
 
         val dims = queryVideoDimensions(uri)
-        VideoExporter(this).export(uri, dims.first, dims.second, overlayManager.getCurrentState().items) { success, outputUri, message ->
+        VideoExporter(this).export(
+            uri, dims.first, dims.second, overlayManager.getCurrentState().items,
+            selectedMusicUri, isOriginalAudioMuted
+        ) { success, outputUri, message ->
             runOnUiThread {
                 isExporting = false
                 Toast.makeText(this, if (success) "Saved to gallery ✓" else (message ?: "Export failed"), Toast.LENGTH_SHORT).show()
@@ -196,9 +261,23 @@ class EditorActivity : AppCompatActivity() {
         finally { try { retriever.release() } catch (_: Exception) {} }
     }
 
+    override fun onPause() {
+        super.onPause()
+        player?.playWhenReady = false
+        musicPlayer?.playWhenReady = false
+    }
+
+    override fun onResume() {
+        super.onResume()
+        player?.playWhenReady = true
+        musicPlayer?.playWhenReady = true
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         player?.release()
         player = null
+        musicPlayer?.release()
+        musicPlayer = null
     }
 }

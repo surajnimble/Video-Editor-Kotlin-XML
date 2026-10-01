@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
     implementation(libs.media3.common)
+    implementation(libs.androidx.media3.transformer)
 
     // FFmpeg (render stickers onto the video and export)
     implementation(libs.ffmpeg.kit.full)
@@ -58,4 +59,5 @@ dependencies {
     implementation ("androidx.camera:camera-video:1.6.2")
     implementation ("androidx.camera:camera-view:1.6.2")
     implementation ("androidx.camera:camera-extensions:1.6.2")
+
 }

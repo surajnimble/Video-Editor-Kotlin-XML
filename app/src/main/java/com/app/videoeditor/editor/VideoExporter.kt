@@ -47,13 +47,22 @@ class VideoExporter(private val context: Context) {
 
     private data class AnimatedClipInfo(val framePattern: String, val fps: Int, val width: Int, val height: Int)
 
-    fun export(inputUri: Uri, videoWidth: Int, videoHeight: Int, items: List<OverlayItem>, callback: Callback) {
+    fun export(
+        inputUri: Uri,
+        videoWidth: Int,
+        videoHeight: Int,
+        items: List<OverlayItem>,
+        musicUri: Uri? = null,
+        muteOriginalAudio: Boolean = false,
+        callback: Callback
+    ) {
         Thread {
             try {
                 val inputPath = prepareInput(inputUri)
+                val musicPath = musicUri?.let { prepareAudioInput(it) }
                 val rendered = renderItems(items, videoWidth, videoHeight)
                 val output = outputFile()
-                val command = buildCommand(inputPath, rendered, output)
+                val command = buildCommand(inputPath, musicPath, muteOriginalAudio, rendered, output)
 
                 Log.d(tag, "Running FFmpeg: $command")
                 val session = FFmpegKit.execute(command)
@@ -72,6 +81,19 @@ class VideoExporter(private val context: Context) {
                 callback.onExportDone(false, null, e.message ?: "Export error")
             }
         }.start()
+    }
+
+    // FIX: music file (chahe bundled raw resource ho ya content:// se) ko
+    // local cache path par copy karta hai, kyunki FFmpeg ko seedha absolute
+    // path chahiye hota hai.
+    private fun prepareAudioInput(uri: Uri): String {
+        if (uri.scheme == "file") return uri.path ?: uri.toString()
+        val ext = context.contentResolver.getType(uri)?.substringAfterLast('/') ?: "mp3"
+        val input = File(context.cacheDir, "editor_music_${System.currentTimeMillis()}.$ext")
+        context.contentResolver.openInputStream(uri)?.use { ins ->
+            input.outputStream().use { out -> ins.copyTo(out) }
+        }
+        return input.absolutePath
     }
 
     private fun prepareInput(uri: Uri): String {
@@ -309,36 +331,72 @@ class VideoExporter(private val context: Context) {
         return bitmap
     }
 
-    private fun buildCommand(inputPath: String, items: List<RenderedItem>, output: File): String {
-        if (items.isEmpty()) return "-y -i \"$inputPath\" -c copy \"${output.absolutePath}\""
+    private fun buildCommand(
+        inputPath: String,
+        musicPath: String?,
+        muteOriginalAudio: Boolean,
+        items: List<RenderedItem>,
+        output: File
+    ): String {
+        val saturation = 1.3
 
-        val inputs = buildString {
-            append("-y -i \"$inputPath\"")
-            items.forEach { item ->
-                when (item) {
-                    // Static image: -loop 1 -i single.png (poori video par same frame loop)
-                    is RenderedItem.Image -> append(" -loop 1 -i \"${item.file.absolutePath}\"")
-                    // FIX: animated GIF ab PNG-frame-sequence se -- -loop 1 yahan
-                    // ek image2-sequence input par POORI sequence ko repeatedly
-                    // loop karta hai (ek single frame ko repeat nahi), isliye
-                    // asli animation milti hai, alpha bhi RGBA-PNG se reliable hai.
-                    is RenderedItem.Clip -> append(" -framerate ${item.fps} -loop 1 -i \"${item.framePattern}\"")
-                }
+        val inputs = StringBuilder("-y -i \"$inputPath\"")
+        items.forEach { item ->
+            when (item) {
+                is RenderedItem.Image -> inputs.append(" -loop 1 -i \"${item.file.absolutePath}\"")
+                is RenderedItem.Clip -> inputs.append(" -framerate ${item.fps} -loop 1 -i \"${item.framePattern}\"")
             }
+        }
+        // FIX: music hamesha sabse AAKHRI input hoti hai -- yeh index yahi se nikalta hai
+        val musicInputIndex = items.size + 1
+        if (musicPath != null) {
+            inputs.append(" -stream_loop -1 -i \"$musicPath\"") // poori video-duration tak loop
         }
 
         val filters = mutableListOf<String>()
         var current = "[0:v]"
-        items.forEachIndexed { index, s ->
-            val nextLabel = if (index == items.size - 1) "vout" else "v${index + 1}"
-            filters.add("$current[${index + 1}:v]overlay=x=${s.x}:y=${s.y}:eof_action=pass[$nextLabel]")
-            current = "[$nextLabel]"
+        if (items.isEmpty()) {
+            filters.add("[0:v]hue=s=$saturation[vout]")
+        } else {
+            items.forEachIndexed { index, s ->
+                val nextLabel = if (index == items.size - 1) "vraw" else "v${index + 1}"
+                filters.add("$current[${index + 1}:v]overlay=x=${s.x}:y=${s.y}:eof_action=pass[$nextLabel]")
+                current = "[$nextLabel]"
+            }
+            filters.add("[vraw]hue=s=$saturation[vout]")
+        }
+
+        // FIX: 4 audio combinations -- original rakho / mute karo / music ko
+        // original ke saath mix karo / music se poora replace karo.
+        val audioOutputArg: String
+        val audioCodecArgs: String
+        when {
+            musicPath != null && !muteOriginalAudio -> {
+                filters.add("[0:a][$musicInputIndex:a]amix=inputs=2:duration=first:dropout_transition=2[aout]")
+                audioOutputArg = "-map \"[aout]\""
+                audioCodecArgs = "-c:a aac -b:a 128k"
+            }
+            musicPath != null && muteOriginalAudio -> {
+                audioOutputArg = "-map \"$musicInputIndex:a\""
+                audioCodecArgs = "-c:a aac -b:a 128k"
+            }
+            musicPath == null && !muteOriginalAudio -> {
+                audioOutputArg = "-map \"0:a?\""
+                audioCodecArgs = "-c:a aac -b:a 128k"
+            }
+            else -> { // no music, muted
+                audioOutputArg = "-an"
+                audioCodecArgs = ""
+            }
         }
 
         return buildString {
+            append("-sws_flags accurate_rnd+full_chroma_int ")
             append(inputs)
             append(" -filter_complex \"${filters.joinToString(";")}\"")
-            append(" -map \"[vout]\" -map \"0:a?\" -c:v libopenh264 -b:v 4M -pix_fmt yuv420p -c:a aac -b:a 128k -shortest")
+            append(" -map \"[vout]\" $audioOutputArg -c:v libopenh264 -b:v 4M -pix_fmt yuv420p")
+            if (audioCodecArgs.isNotEmpty()) append(" $audioCodecArgs")
+            append(" -shortest")
             append(" -y \"${output.absolutePath}\"")
         }
     }

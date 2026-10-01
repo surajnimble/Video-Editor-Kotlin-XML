@@ -31,6 +31,7 @@ object StickerCatalog {
         "happy_dance_sticker",
         "celebrate_happy_birthday_sticker",
         "happy_birthday_success",
+        "happy_dance_sticker",
         "cute_sushi_sticker",
         "sushi_sticker_by_sukrin"
     )

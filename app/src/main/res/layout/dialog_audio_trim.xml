@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <TextView
+        android:id="@+id/btnCancel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:padding="8dp"
+        android:text="Cancel"
+        android:textColor="#FF4E4E"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/btnDone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:padding="8dp"
+        android:text="Done"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <FrameLayout
+        android:id="@+id/tapToPlayArea"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_marginTop="40dp"
+        android:background="#1C1C1E"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnCancel">
+
+        <ImageView
+            android:id="@+id/ivPlay"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:src="@android:drawable/ic_media_play"
+            app:tint="#FFFFFF" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/timeLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="0:00 / 0:00"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tapToPlayArea" />
+
+    <com.app.videoeditor.trimmer.TrimTimelineView
+        android:id="@+id/timeline"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="24dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/timeLabel"
+        app:ttBubbleColor="#D9D9D9"
+        app:ttBubbleCornerRadius="8dp"
+        app:ttBubbleMarginY="15dp"
+        app:ttBubbleShow="true"
+        app:ttBubbleStrokeColor="#FFFFFF"
+        app:ttBubbleStrokeWidth="1dp"
+        app:ttBubbleTextColor="#000000"
+        app:ttBubbleTextSize="12sp"
+        app:ttDimColor="#99000000"
+        app:ttFrameColor="#E3E3E3"
+        app:ttFrameCornerRadius="6dp"
+        app:ttFrameStrokeWidthH="5dp"
+        app:ttFrameStrokeWidthV="5dp"
+        app:ttHandleColor="#FFFFFF"
+        app:ttHandleCornerRadius="4dp"
+        app:ttHandleHeight="60dp"
+        app:ttHandleWidth="15dp"
+        app:ttInnerColor="#06030C"
+        app:ttMinTrimSeconds="1.0"
+        app:ttPlayheadHeight="70dp"
+        app:ttPlayheadWidth="4dp"
+        app:ttShowDim="true"
+        app:ttShowPlayhead="true"
+        app:ttStripHeight="50dp"
+        app:ttThumbCornerRadius="0dp" />
+
+    <SeekBar
+        android:id="@+id/slider"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/timeline" />
+</androidx.constraintlayout.widget.ConstraintLayout>
