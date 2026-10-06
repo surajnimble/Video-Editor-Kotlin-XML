@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.view.View
 import android.widget.FrameLayout
+import com.app.videoeditor.widget.DrawCanvasView
 import com.app.videoeditor.widget.DraggableTextView
 import com.app.videoeditor.widget.StickerView
 
@@ -13,6 +14,18 @@ class OverlayManager(
     private val onStateChanged: () -> Unit
 ) {
     private val views = mutableMapOf<View, OverlayItem>()
+    private var drawCanvasView: DrawCanvasView? = null
+
+    fun setupDrawing(): DrawCanvasView {
+        val view = DrawCanvasView(context)
+        view.onStrokeFinished = { saveState() }
+        views[view] = EditorDrawing(emptyList())
+        overlayContainer.addView(view, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        drawCanvasView = view
+        return view
+    }
 
     fun addSticker(emoji: String = "", imageUri: String? = null, fractionSize: Float = 0.18f) {
         val view = StickerView(context).apply {
@@ -69,6 +82,7 @@ class OverlayManager(
                     view.displayText, view.fractionCenterX, view.fractionCenterY, view.fractionSize, view.rotationDegrees,
                     view.textColor, view.textBackgroundColor, view.fontStyleId, view.textEffectId, view.contentAlignment
                 )
+                is DrawCanvasView -> EditorDrawing(view.getStrokes()) // FIX: naya
                 else -> null
             }
         }
@@ -103,6 +117,14 @@ class OverlayManager(
                         onTapped = { selectView(it) }
                     }
                     views[view] = item; overlayContainer.addView(view)
+                }
+                is EditorDrawing -> {
+                    val view = drawCanvasView ?: return@forEach
+                    view.setStrokes(item.strokes)
+                    views[view] = item
+                    overlayContainer.addView(view, FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+                    ))
                 }
             }
         }

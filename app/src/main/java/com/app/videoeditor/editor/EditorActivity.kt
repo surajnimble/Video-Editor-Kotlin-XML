@@ -22,6 +22,12 @@ import com.app.videoeditor.core.HistoryManager
 import com.app.videoeditor.core.OverlayManager
 import android.content.Intent
 import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.SeekBar
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.app.videoeditor.core.EditorDrawing
+import com.app.videoeditor.widget.BrushType
+import com.app.videoeditor.widget.DrawCanvasView
 
 class EditorActivity : AppCompatActivity() {
 
@@ -50,6 +56,9 @@ class EditorActivity : AppCompatActivity() {
     private var musicPlayer: ExoPlayer? = null
     private var selectedMusicUri: Uri? = null
     private var isOriginalAudioMuted = false
+    private lateinit var drawCanvasView: DrawCanvasView
+    private var isDrawModeActive = false
+    private var drawToolbarView: View? = null
 
     companion object {
         const val EXTRA_VIDEO_URI = "extra_video_uri"
@@ -122,6 +131,7 @@ class EditorActivity : AppCompatActivity() {
                 "Sticker" -> showStickerSheet()
                 "Music" -> showMusicSheet()
                 "Mute" -> toggleMuteOriginalAudio()
+                "Draw" -> toggleDrawMode()
                 "Download" -> exportVideo()
                 else -> Toast.makeText(this, "${item.title} - coming soon", Toast.LENGTH_SHORT).show()
             }
@@ -210,7 +220,8 @@ class EditorActivity : AppCompatActivity() {
             historyManager.push(overlayManager.getCurrentState())
             updateUndoRedoButtons()
         }
-        historyManager.push(overlayManager.getCurrentState()) // Initial state
+        drawCanvasView = overlayManager.setupDrawing()
+        historyManager.push(overlayManager.getCurrentState())
         updateUndoRedoButtons()
     }
 
@@ -229,6 +240,103 @@ class EditorActivity : AppCompatActivity() {
             prepare()
         }
         playerView.player = player
+    }
+
+    private fun toggleDrawMode() {
+        if (isDrawModeActive) exitDrawMode() else enterDrawMode()
+    }
+
+    private fun enterDrawMode() {
+        isDrawModeActive = true
+        drawCanvasView.isDrawingEnabled = true
+        drawCanvasView.bringToFront() // taaki draw-mode me touches sticker/text ke neeche na chali jaayein
+        overlayManager.deselectAll()
+        showDrawToolbar()
+    }
+
+    private fun exitDrawMode() {
+        isDrawModeActive = false
+        drawCanvasView.isDrawingEnabled = false
+        hideDrawToolbar()
+    }
+
+    private fun showDrawToolbar() {
+        findViewById<View>(R.id.topBar).visibility = View.INVISIBLE
+        findViewById<View>(R.id.rvFeatures).visibility = View.INVISIBLE
+
+        if (drawToolbarView != null) { drawToolbarView?.visibility = View.VISIBLE; return }
+
+        val editorRoot = findViewById<ConstraintLayout>(R.id.editorRoot)
+        val toolbar = layoutInflater.inflate(R.layout.draw_toolbar, editorRoot, false)
+        val lp = ConstraintLayout.LayoutParams(
+            ConstraintLayout.LayoutParams.MATCH_PARENT, ConstraintLayout.LayoutParams.WRAP_CONTENT
+        )
+        lp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+        lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+        lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+        toolbar.layoutParams = lp
+        editorRoot.addView(toolbar)
+        drawToolbarView = toolbar
+        wireDrawToolbar(toolbar)
+    }
+
+    private fun hideDrawToolbar() {
+        drawToolbarView?.visibility = View.GONE
+        findViewById<View>(R.id.topBar).visibility = View.VISIBLE
+        findViewById<View>(R.id.rvFeatures).visibility = View.VISIBLE
+    }
+
+    private fun wireDrawToolbar(toolbar: View) {
+        val rvColors = toolbar.findViewById<RecyclerView>(R.id.rvDrawColors)
+        val slider = toolbar.findViewById<SeekBar>(R.id.sliderBrushSize)
+        val btnUndo = toolbar.findViewById<View>(R.id.btnUndoDraw)
+        val btnDone = toolbar.findViewById<View>(R.id.btnDoneDraw)
+        val btnPen = toolbar.findViewById<TextView>(R.id.btnBrushPen)
+        val btnMarker = toolbar.findViewById<TextView>(R.id.btnBrushMarker)
+        val btnHighlighter = toolbar.findViewById<TextView>(R.id.btnBrushHighlighter)
+        val btnEraser = toolbar.findViewById<TextView>(R.id.btnEraser)
+
+        rvColors.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        rvColors.adapter = ColorSwatchAdapter(
+            onColorPicked = { color ->
+                drawCanvasView.currentColor = color
+                drawCanvasView.isEraserMode = false
+            }
+        )
+
+        slider.max = 100
+        slider.progress = 20
+        slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                // 0.002 (chhota) se 0.06 (bada) tak map kiya hai -- canvas ke min-dimension ka fraction
+                drawCanvasView.currentWidthFraction = 0.002f + (progress / 100f) * 0.058f
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        btnUndo.setOnClickListener { drawCanvasView.undoLastStroke() }
+        btnDone.setOnClickListener { exitDrawMode() }
+
+        fun highlight(selected: TextView) {
+            listOf(btnPen, btnMarker, btnHighlighter, btnEraser).forEach {
+                it.setBackgroundColor(if (it == selected) 0x33FFFFFF else 0x00000000)
+            }
+        }
+        fun selectBrush(brush: BrushType, btn: TextView) {
+            drawCanvasView.currentBrush = brush
+            drawCanvasView.isEraserMode = false
+            highlight(btn)
+        }
+        btnPen.setOnClickListener { selectBrush(BrushType.PEN, btnPen) }
+        btnMarker.setOnClickListener { selectBrush(BrushType.MARKER, btnMarker) }
+        btnHighlighter.setOnClickListener { selectBrush(BrushType.HIGHLIGHTER, btnHighlighter) }
+        btnEraser.setOnClickListener {
+            drawCanvasView.isEraserMode = true
+            highlight(btnEraser)
+        }
+
+        highlight(btnPen)
     }
 
     @SuppressLint("StaticFieldLeak")

@@ -1,5 +1,7 @@
 package com.app.videoeditor.core
 
+import com.app.videoeditor.widget.DrawStroke
+
 sealed class OverlayItem {
     abstract val centerX: Float
     abstract val centerY: Float
@@ -28,6 +30,15 @@ data class EditorText(
     val textEffectId: String = "none",
     val contentAlignment: Int = 1
 ) : OverlayItem()
+
+data class EditorDrawing(
+    val strokes: List<DrawStroke>
+) : OverlayItem() {
+    override val centerX = 0.5f
+    override val centerY = 0.5f
+    override val size = 1f
+    override val rotation = 0f
+}
 
 data class EditorState(
     val items: List<OverlayItem> = emptyList()

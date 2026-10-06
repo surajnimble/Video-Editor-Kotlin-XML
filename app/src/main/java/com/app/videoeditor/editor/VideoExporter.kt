@@ -25,6 +25,10 @@ import java.io.FileOutputStream
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import com.app.videoeditor.core.EditorDrawing
+import com.app.videoeditor.widget.BrushType
 
 class VideoExporter(private val context: Context) {
 
@@ -34,12 +38,6 @@ class VideoExporter(private val context: Context) {
 
     private val tag = "VideoExporter"
 
-    // FIX: ab do tarah ke overlay ho sakte hain -- static Image (loop 1 se
-    // poori video par loop hoti hai) aur animated Clip. Clip ab ek WEBM file
-    // nahi balki seedha PNG-frames ka SEQUENCE hai (f_%03d.png) -- har frame
-    // apni RGBA transparency ke saath, isliye koi alpha-codec dependency
-    // nahi. VP9/WEBM alpha intermediate step hata diya kyunki device par
-    // alpha sahi se preserve nahi ho raha tha (background black aa raha tha).
     private sealed class RenderedItem(val x: Int, val y: Int) {
         class Image(val file: File, x: Int, y: Int) : RenderedItem(x, y)
         class Clip(val framePattern: String, val fps: Int, x: Int, y: Int) : RenderedItem(x, y)
@@ -116,9 +114,19 @@ class VideoExporter(private val context: Context) {
 
         return items.mapIndexedNotNull { index, item ->
             try {
+                // FIX: drawing ek alag path hai -- poore video-canvas size ka bitmap,
+                // har aur item ke fractional-size wale pattern se alag.
+                if (item is EditorDrawing) {
+                    if (item.strokes.isEmpty()) return@mapIndexedNotNull null
+                    val bitmap = renderDrawingBitmap(item, w, h)
+                    val file = File(dir, "item_$index.png")
+                    FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
+                    bitmap.recycle()
+                    return@mapIndexedNotNull RenderedItem.Image(file, 0, 0) // poore canvas par (0,0) se overlay
+                }
+
                 val pixelSize = (refDimension * item.size).roundToInt().coerceAtLeast(8)
 
-                // FIX: asli animated GIF ho to alag path -- animated PNG-frame-sequence banao.
                 if (item is EditorSticker && item.imageUri != null) {
                     val clip = renderAnimatedStickerClip(item, pixelSize, dir, index)
                     if (clip != null) {
@@ -187,10 +195,54 @@ class VideoExporter(private val context: Context) {
         return AnimatedClipInfo("${framesDir.absolutePath}/f_%03d.png", fps, dstW, dstH)
     }
 
+    // FIX: drawing export bhi bilkul DrawCanvasView.onDraw() jaisa hi render
+// karta hai (saveLayer + eraser clear), taaki preview aur export match karein.
+    private fun renderDrawingBitmap(item: EditorDrawing, w: Int, h: Int): Bitmap {
+        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        val layerId = canvas.saveLayer(0f, 0f, w.toFloat(), h.toFloat(), null)
+        item.strokes.forEach { stroke ->
+            if (stroke.points.size < 4) return@forEach
+            val path = android.graphics.Path()
+            path.moveTo(stroke.points[0] * w, stroke.points[1] * h)
+            var i = 2
+            while (i < stroke.points.size) {
+                path.lineTo(stroke.points[i] * w, stroke.points[i + 1] * h)
+                i += 2
+            }
+            val minDim = min(w, h)
+            paint.strokeWidth = stroke.widthFraction * minDim
+            paint.strokeCap = if (stroke.brush == BrushType.HIGHLIGHTER) Paint.Cap.BUTT else Paint.Cap.ROUND
+
+            if (stroke.isEraser) {
+                paint.color = Color.TRANSPARENT
+                paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            } else {
+                paint.xfermode = null
+                paint.color = when (stroke.brush) {
+                    BrushType.PEN -> stroke.color
+                    BrushType.MARKER -> withAlpha(stroke.color, 200)
+                    BrushType.HIGHLIGHTER -> withAlpha(stroke.color, 90)
+                }
+            }
+            canvas.drawPath(path, paint)
+        }
+        canvas.restoreToCount(layerId)
+        return bitmap
+    }
+
+    private fun withAlpha(color: Int, alpha: Int): Int = Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
     private fun renderOverlayItemToBitmap(item: OverlayItem, pixelSize: Int, density: Float): Bitmap =
         when (item) {
             is EditorSticker -> renderStickerBitmap(item, pixelSize, density)
             is EditorText -> renderTextBitmap(item, pixelSize, density)
+            is EditorDrawing -> error("EditorDrawing should be handled in renderItems(), not here")
         }
 
     private fun renderStickerBitmap(item: EditorSticker, pixelSize: Int, density: Float): Bitmap =
